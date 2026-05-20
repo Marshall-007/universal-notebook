@@ -41,6 +41,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          tauriScript: npx tauri
           tagName: ${{ github.ref_name }}
           releaseName: 'Universal Notebook ${{ github.ref_name }}'
           releaseBody: 'Download the installer for your platform below.'
@@ -67,7 +68,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --ignore-scripts && npm rebuild
 
       - name: Build web app
         run: npm run build

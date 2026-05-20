@@ -11,6 +11,7 @@
     "cap:add:android": "npx cap add android",
     "cap:sync": "npx cap sync",
     "cap:open:android": "npx cap open android",
+    "tauri": "tauri",
     "tauri:dev": "npx tauri dev",
     "tauri:build": "npx tauri build"
   },
@@ -21,7 +22,7 @@
     "@capacitor/ios": "^5.7.8",
     "@headlessui/react": "^2.2.10",
     "@supabase/supabase-js": "^2.106.1",
-    "@tailwindcss/oxide-darwin-arm64": "^4.3.0",
+
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-query": "^5.100.11",
     "@tauri-apps/api": "^2.11.0",
