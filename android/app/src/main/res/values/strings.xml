@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Universal Notebook</string>
+    <string name="title_activity_main">Universal Notebook</string>
+    <string name="package_name">com.universalnotebook.app</string>
+    <string name="custom_url_scheme">com.universalnotebook.app</string>
+</resources>
