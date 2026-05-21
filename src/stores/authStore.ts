@@ -115,7 +115,7 @@ export const useAuthStore = create<AuthState>()(
         }
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
-          options: { redirectTo: window.location.origin },
+          options: { redirectTo: window.location.origin.startsWith('http') ? window.location.origin : 'https://eqpfuslldubeochedsol.supabase.co/auth/v1/callback' },
         });
         if (error) return { error: error.message };
         return {};
