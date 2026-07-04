@@ -28,6 +28,17 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Resolve release tag
+        id: rel
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            V=$(node -p "require('./src-tauri/tauri.conf.json').version")
+            echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -42,8 +53,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tauriScript: npx tauri
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Universal Notebook ${{ github.ref_name }}'
+          tagName: ${{ steps.rel.outputs.tag }}
+          releaseName: 'Universal Notebook ${{ steps.rel.outputs.tag }}'
           releaseBody: 'Download the installer for your platform below.'
           releaseDraft: true
 
@@ -86,9 +97,35 @@ jobs:
           name: universal-notebook-android
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Upload APK to release
-        if: startsWith(github.ref, 'refs/tags/')
+  # Attach the APK to the same draft release the desktop job created. Runs after
+  # build-desktop so the release already exists (no create race), and works for
+  # both tag pushes and manual workflow_dispatch runs.
+  attach-apk:
+    needs: [build-desktop, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: rel
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            V=$(node -p "require('./src-tauri/tauri.conf.json').version")
+            echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: universal-notebook-android
+          path: apk
+
+      - name: Attach APK to release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          tag_name: ${{ steps.rel.outputs.tag }}
+          files: apk/app-debug.apk
