@@ -44,13 +44,18 @@ export const useAppStore = create<AppState>()(
       setCommandPaletteOpen: (open) => set({ isCommandPaletteOpen: open }),
 
       applyTheme: () => {
-        const { theme } = get().settings;
+        const { theme, fontSize } = get().settings;
         const root = document.documentElement;
 
         if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
           root.classList.add('dark');
         } else {
           root.classList.remove('dark');
+        }
+
+        // Apply the user's font-size preference (rem-based UI scales with it).
+        if (fontSize) {
+          root.style.fontSize = `${fontSize}px`;
         }
       },
     }),

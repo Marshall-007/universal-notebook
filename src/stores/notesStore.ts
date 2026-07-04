@@ -3,12 +3,23 @@ import { db, addToSyncQueue } from '@/lib/db';
 import { syncEngine } from '@/lib/sync';
 import type { Note, Notebook, Tag } from '@/types';
 
+export type NotesView = 'active' | 'pinned' | 'archived' | 'trash';
+
+function sortNotes(notes: Note[]): Note[] {
+  return [...notes].sort((a, b) => {
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
+}
+
 interface NotesState {
   notes: Note[];
   notebooks: Notebook[];
   tags: Tag[];
   activeNotebookId: string | null;
   activeNoteId: string | null;
+  currentView: NotesView;
   isLoading: boolean;
 
   // Notebooks
@@ -19,17 +30,41 @@ interface NotesState {
   setActiveNotebook: (id: string | null) => void;
 
   // Notes
-  loadNotes: (userId: string, notebookId?: string | null) => Promise<void>;
+  loadNotes: (userId: string, notebookId?: string | null, view?: NotesView) => Promise<void>;
   createNote: (note: Omit<Note, 'createdAt' | 'updatedAt' | '_synced' | '_localOnly'>) => Promise<Note>;
   updateNote: (id: string, updates: Partial<Note>) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
+  restoreNote: (id: string) => Promise<void>;
+  permanentlyDeleteNote: (id: string) => Promise<void>;
   togglePin: (id: string) => Promise<void>;
   archiveNote: (id: string) => Promise<void>;
+  unarchiveNote: (id: string) => Promise<void>;
   setActiveNote: (id: string | null) => void;
+
+  // Remote reconciliation (driven by the sync engine)
+  applyRemoteNote: (note: Note) => void;
+  removeLocalNote: (id: string) => void;
+  applyRemoteNotebook: (notebook: Notebook) => void;
+  removeLocalNotebook: (id: string) => void;
 
   // Tags
   loadTags: (userId: string) => Promise<void>;
   createTag: (tag: Omit<Tag, 'id'>) => Promise<Tag>;
+}
+
+// Whether a note belongs in the currently displayed view.
+function matchesView(note: Note, view: NotesView): boolean {
+  switch (view) {
+    case 'trash':
+      return !!note.deletedAt;
+    case 'archived':
+      return !note.deletedAt && note.isArchived;
+    case 'pinned':
+      return !note.deletedAt && !note.isArchived && note.isPinned;
+    case 'active':
+    default:
+      return !note.deletedAt && !note.isArchived;
+  }
 }
 
 export const useNotesStore = create<NotesState>()((set, get) => ({
@@ -38,6 +73,7 @@ export const useNotesStore = create<NotesState>()((set, get) => ({
   tags: [],
   activeNotebookId: null,
   activeNoteId: null,
+  currentView: 'active',
   isLoading: false,
 
   // Notebooks
@@ -85,29 +121,19 @@ export const useNotesStore = create<NotesState>()((set, get) => ({
   setActiveNotebook: (id) => set({ activeNotebookId: id }),
 
   // Notes
-  loadNotes: async (userId, notebookId) => {
-    set({ isLoading: true });
-    let notes: Note[];
-    if (notebookId) {
-      notes = await db.notes
-        .where('userId')
-        .equals(userId)
-        .and((n) => n.notebookId === notebookId && !n.deletedAt && !n.isArchived)
-        .toArray();
-    } else {
-      notes = await db.notes
-        .where('userId')
-        .equals(userId)
-        .and((n) => !n.deletedAt && !n.isArchived)
-        .toArray();
-    }
-    // Sort: pinned first, then by updatedAt desc
-    notes.sort((a, b) => {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-    });
-    set({ notes, isLoading: false });
+  loadNotes: async (userId, notebookId, view = 'active') => {
+    set({ isLoading: true, currentView: view });
+    const notes = await db.notes
+      .where('userId')
+      .equals(userId)
+      .and((n) => {
+        if (!matchesView(n, view)) return false;
+        // Notebook filter only applies to the default active view.
+        if (view === 'active' && notebookId) return n.notebookId === notebookId;
+        return true;
+      })
+      .toArray();
+    set({ notes: sortNotes(notes), isLoading: false });
   },
 
   createNote: async (note) => {
@@ -139,9 +165,20 @@ export const useNotesStore = create<NotesState>()((set, get) => ({
 
   deleteNote: async (id) => {
     const now = new Date().toISOString();
-    await db.notes.update(id, { deletedAt: now });
+    await db.notes.update(id, { deletedAt: now, _synced: false });
     await addToSyncQueue('notes', id, 'delete', {});
     syncEngine.processQueue();
+    set({ notes: get().notes.filter((n) => n.id !== id) });
+  },
+
+  restoreNote: async (id) => {
+    await get().updateNote(id, { deletedAt: null, isArchived: false });
+    set({ notes: get().notes.filter((n) => n.id !== id) });
+  },
+
+  permanentlyDeleteNote: async (id) => {
+    // Already soft-deleted server-side; just drop the local cache copy.
+    await db.notes.delete(id);
     set({ notes: get().notes.filter((n) => n.id !== id) });
   },
 
@@ -149,6 +186,10 @@ export const useNotesStore = create<NotesState>()((set, get) => ({
     const note = get().notes.find((n) => n.id === id);
     if (!note) return;
     await get().updateNote(id, { isPinned: !note.isPinned });
+    // In the pinned view, unpinning should remove the note from the list.
+    if (get().currentView === 'pinned' && note.isPinned) {
+      set({ notes: get().notes.filter((n) => n.id !== id) });
+    }
   },
 
   archiveNote: async (id) => {
@@ -156,7 +197,36 @@ export const useNotesStore = create<NotesState>()((set, get) => ({
     set({ notes: get().notes.filter((n) => n.id !== id) });
   },
 
+  unarchiveNote: async (id) => {
+    await get().updateNote(id, { isArchived: false });
+    set({ notes: get().notes.filter((n) => n.id !== id) });
+  },
+
   setActiveNote: (id) => set({ activeNoteId: id }),
+
+  // Remote reconciliation — keep the visible list in sync with realtime/pull.
+  applyRemoteNote: (note) => {
+    const { notes, currentView } = get();
+    const without = notes.filter((n) => n.id !== note.id);
+    if (matchesView(note, currentView)) {
+      set({ notes: sortNotes([...without, note]) });
+    } else {
+      set({ notes: without });
+    }
+  },
+
+  removeLocalNote: (id) => {
+    set({ notes: get().notes.filter((n) => n.id !== id) });
+  },
+
+  applyRemoteNotebook: (notebook) => {
+    const without = get().notebooks.filter((nb) => nb.id !== notebook.id);
+    set({ notebooks: [...without, notebook].sort((a, b) => a.sortOrder - b.sortOrder) });
+  },
+
+  removeLocalNotebook: (id) => {
+    set({ notebooks: get().notebooks.filter((nb) => nb.id !== id) });
+  },
 
   // Tags
   loadTags: async (userId) => {

@@ -2,8 +2,20 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { syncEngine } from '@/lib/sync';
+import { useAppStore } from '@/stores/appStore';
 import { clearAllData } from '@/lib/db';
 import type { User } from '@/types';
+
+// Module-level so StrictMode double-invoke / re-initialize cannot stack them.
+let authSubscription: { unsubscribe: () => void } | null = null;
+let syncStatusUnsub: (() => void) | null = null;
+
+function bridgeSyncStatus() {
+  if (syncStatusUnsub) return;
+  syncStatusUnsub = syncEngine.subscribe((status) => {
+    useAppStore.getState().setSyncStatus(status);
+  });
+}
 
 interface AuthState {
   user: User | null;
@@ -41,6 +53,8 @@ export const useAuthStore = create<AuthState>()(
           return;
         }
 
+        bridgeSyncStatus();
+
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
@@ -53,30 +67,39 @@ export const useAuthStore = create<AuthState>()(
             };
             set({ user, isAuthenticated: true });
             await syncEngine.initialize(user.id);
+          } else {
+            // No valid session — clear any rehydrated auth state so we don't
+            // render the Dashboard for a signed-out user with sync dead.
+            set({ user: null, isAuthenticated: false });
+            await syncEngine.cleanup();
           }
         } catch (error) {
           console.error('Auth initialization failed:', error);
+          set({ user: null, isAuthenticated: false });
         } finally {
           set({ isLoading: false });
         }
 
-        // Listen for auth changes
-        supabase.auth.onAuthStateChange(async (event, session) => {
-          if (event === 'SIGNED_IN' && session?.user) {
-            const user: User = {
-              id: session.user.id,
-              email: session.user.email || '',
-              displayName: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
-              avatarUrl: session.user.user_metadata?.avatar_url,
-              createdAt: session.user.created_at,
-            };
-            set({ user, isAuthenticated: true });
-            await syncEngine.initialize(user.id);
-          } else if (event === 'SIGNED_OUT') {
-            set({ user: null, isAuthenticated: false });
-            await syncEngine.cleanup();
-          }
-        });
+        // Listen for auth changes — register exactly once.
+        if (!authSubscription) {
+          const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (event === 'SIGNED_IN' && session?.user) {
+              const user: User = {
+                id: session.user.id,
+                email: session.user.email || '',
+                displayName: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+                avatarUrl: session.user.user_metadata?.avatar_url,
+                createdAt: session.user.created_at,
+              };
+              set({ user, isAuthenticated: true });
+              await syncEngine.initialize(user.id);
+            } else if (event === 'SIGNED_OUT') {
+              set({ user: null, isAuthenticated: false });
+              await syncEngine.cleanup();
+            }
+          });
+          authSubscription = data.subscription;
+        }
       },
 
       signUp: async (email, password, displayName) => {
