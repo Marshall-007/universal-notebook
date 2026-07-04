@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, supabaseUrl } from '@/lib/supabase';
 import { syncEngine } from '@/lib/sync';
 import { useAppStore } from '@/stores/appStore';
 import { clearAllData } from '@/lib/db';
@@ -138,7 +138,7 @@ export const useAuthStore = create<AuthState>()(
         }
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
-          options: { redirectTo: window.location.origin.startsWith('http') ? window.location.origin : 'https://eqpfuslldubeochedsol.supabase.co/auth/v1/callback' },
+          options: { redirectTo: window.location.origin.startsWith('http') ? window.location.origin : `${supabaseUrl}/auth/v1/callback` },
         });
         if (error) return { error: error.message };
         return {};
