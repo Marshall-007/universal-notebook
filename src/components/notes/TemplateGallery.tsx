@@ -1,4 +1,4 @@
-import { systemTemplates, getTemplatesByCategory } from '@/templates';
+import { getTemplatesByCategory } from '@/templates';
 import type { TemplateType } from '@/types';
 import { X } from 'lucide-react';
 

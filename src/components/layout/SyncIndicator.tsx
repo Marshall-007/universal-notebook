@@ -1,4 +1,4 @@
-import { Wifi, WifiOff, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { WifiOff, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { cn } from '@/lib/utils';
 

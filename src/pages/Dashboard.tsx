@@ -15,13 +15,14 @@ import { getTemplate } from '@/templates';
 import { groupNotesByDate, getDateGroupLabel } from '@/lib/utils';
 import { db } from '@/lib/db';
 import type { TemplateType, Note } from '@/types';
+import type { Node as FlowNode, Edge as FlowEdge } from 'reactflow';
 import { Plus, Search, ArrowLeft } from 'lucide-react';
 
 type Page = 'notes' | 'editor' | 'search' | 'notebooks' | 'settings' | 'pinned' | 'archive' | 'trash';
 
 export function Dashboard() {
   const { user } = useAuthStore();
-  const { notes, notebooks, loadNotes, loadNotebooks, createNote, updateNote, deleteNote, togglePin, archiveNote, activeNoteId, setActiveNote } = useNotesStore();
+  const { notes, loadNotes, loadNotebooks, createNote, updateNote, deleteNote, togglePin, archiveNote, activeNoteId, setActiveNote } = useNotesStore();
   const { isCommandPaletteOpen, setCommandPaletteOpen, settings } = useAppStore();
   const [currentPage, setCurrentPage] = useState<Page>('notes');
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
@@ -162,8 +163,8 @@ export function Dashboard() {
           {currentPage === 'editor' && editingNote ? (
             editingNote.templateType === 'mind-map' ? (
               <MindMap
-                initialNodes={(editingNote.contentJson as any)?.nodes}
-                initialEdges={(editingNote.contentJson as any)?.edges}
+                initialNodes={(editingNote.contentJson as { nodes?: FlowNode[] } | null)?.nodes}
+                initialEdges={(editingNote.contentJson as { edges?: FlowEdge[] } | null)?.edges}
                 onUpdate={(nodes, edges) => handleEditorUpdate({ type: 'mindmap', nodes, edges }, '')}
               />
             ) : (

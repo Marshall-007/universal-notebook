@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 import { useSearch } from '@/hooks/useSearch';
 import { useAuthStore } from '@/stores/authStore';
-import { useNotesStore } from '@/stores/notesStore';
 import { formatNoteDate } from '@/lib/utils';
 
 interface CommandPaletteProps {
@@ -77,7 +76,7 @@ export function CommandPalette({ isOpen, onClose, onSelectNote }: CommandPalette
           )}
           {!isSearching && results.length > 0 && (
             <div className="py-2">
-              {results.map(({ note, matchedText, score }) => (
+              {results.map(({ note, matchedText }) => (
                 <button
                   key={note.id}
                   onClick={() => { onSelectNote(note.id); onClose(); }}

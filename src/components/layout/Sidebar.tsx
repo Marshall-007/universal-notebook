@@ -1,9 +1,8 @@
-import { useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { useNotesStore } from '@/stores/notesStore';
 import { useAppStore } from '@/stores/appStore';
 import {
-  BookOpen, Plus, ChevronRight, Settings, LogOut, Moon, Sun,
+  BookOpen, Plus, Settings, LogOut, Moon, Sun,
   PanelLeftClose, PanelLeftOpen, Archive, Trash2, Star
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
