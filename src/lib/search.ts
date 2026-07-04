@@ -57,11 +57,12 @@ export async function searchByDateRange(
 }
 
 export async function getRecentNotes(userId: string, limit = 10): Promise<Note[]> {
-  return db.notes
+  // sortBy() always returns ascending, so sort then reverse to get the most
+  // recently updated notes first (a leading .reverse() would be nullified).
+  const notes = await db.notes
     .where('userId')
     .equals(userId)
     .and((n) => !n.deletedAt && !n.isArchived)
-    .reverse()
-    .sortBy('updatedAt')
-    .then((notes) => notes.slice(0, limit));
+    .sortBy('updatedAt');
+  return notes.reverse().slice(0, limit);
 }

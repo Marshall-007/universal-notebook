@@ -142,6 +142,14 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           input.onchange = () => {
             const file = input.files?.[0];
             if (file) {
+              // Images are embedded inline as base64 in the note body (which is
+              // stored in IndexedDB and synced as JSONB). Cap the size so a
+              // large photo can't silently exhaust storage / bloat sync.
+              const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2 MB
+              if (file.size > MAX_IMAGE_BYTES) {
+                alert('Image is too large (max 2 MB). Please choose a smaller image.');
+                return;
+              }
               const reader = new FileReader();
               reader.onload = () => {
                 const src = reader.result as string;

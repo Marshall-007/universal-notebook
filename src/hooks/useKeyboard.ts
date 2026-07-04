@@ -7,10 +7,18 @@ export function useKeyboard() {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const isMod = e.metaKey || e.ctrlKey;
 
-    // Cmd/Ctrl + K — Command palette
+    // Cmd/Ctrl + K — Command palette (works even while editing)
     if (isMod && e.key === 'k') {
       e.preventDefault();
       toggleCommandPalette();
+      return;
+    }
+
+    // Don't hijack formatting shortcuts (e.g. Cmd/Ctrl+B bold) while the user
+    // is typing in an input, textarea, or the rich-text editor.
+    const target = e.target as HTMLElement | null;
+    if (target && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+      return;
     }
 
     // Cmd/Ctrl + B — Toggle sidebar

@@ -18,6 +18,13 @@ export function useVoice(onTranscript?: (text: string) => void): UseVoiceReturn 
 
   const isSupported = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
 
+  const releaseStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!isSupported) return;
 
@@ -52,10 +59,12 @@ export function useVoice(onTranscript?: (text: string) => void): UseVoiceReturn 
     recognition.onerror = (event: Event) => {
       console.error('Speech recognition error:', event);
       setIsListening(false);
+      releaseStream();
     };
 
     recognition.onend = () => {
       setIsListening(false);
+      releaseStream();
     };
 
     recognitionRef.current = recognition;
@@ -63,15 +72,12 @@ export function useVoice(onTranscript?: (text: string) => void): UseVoiceReturn 
     return () => {
       recognition.abort();
       // Ensure mic is released on cleanup
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-      }
+      releaseStream();
     };
-  }, [isSupported, onTranscript]);
+  }, [isSupported, onTranscript, releaseStream]);
 
   const startListening = useCallback(async () => {
-    if (recognitionRef.current && !isListening) {
+    if (recognitionRef.current && !isListening && !streamRef.current) {
       try {
         // Acquire mic stream so we can explicitly release it later
         streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -80,9 +86,10 @@ export function useVoice(onTranscript?: (text: string) => void): UseVoiceReturn 
         setTranscript('');
       } catch (err) {
         console.error('Mic access denied:', err);
+        releaseStream();
       }
     }
-  }, [isListening]);
+  }, [isListening, releaseStream]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current && isListening) {
@@ -90,11 +97,8 @@ export function useVoice(onTranscript?: (text: string) => void): UseVoiceReturn 
       setIsListening(false);
     }
     // Release the microphone so other apps (Teams, etc.) can use it
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-  }, [isListening]);
+    releaseStream();
+  }, [isListening, releaseStream]);
 
   const toggleListening = useCallback(() => {
     if (isListening) {

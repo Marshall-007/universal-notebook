@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { searchNotes, searchByDateRange, getRecentNotes } from '@/lib/search';
 import type { SearchResult, Note } from '@/types';
 
@@ -6,21 +6,25 @@ export function useSearch(userId: string) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [query, setQuery] = useState('');
+  // Monotonic request id so out-of-order responses can't clobber newer state.
+  const reqId = useRef(0);
 
   const search = useCallback(async (searchQuery: string) => {
+    const myId = ++reqId.current;
     setQuery(searchQuery);
     if (!searchQuery.trim()) {
       setResults([]);
+      setIsSearching(false);
       return;
     }
     setIsSearching(true);
     try {
       const searchResults = await searchNotes(searchQuery, userId);
-      setResults(searchResults);
+      if (myId === reqId.current) setResults(searchResults);
     } catch (error) {
       console.error('Search failed:', error);
     } finally {
-      setIsSearching(false);
+      if (myId === reqId.current) setIsSearching(false);
     }
   }, [userId]);
 

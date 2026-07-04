@@ -3,12 +3,16 @@ import ReactFlow, {
   addEdge,
   useNodesState,
   useEdgesState,
+  applyNodeChanges,
+  applyEdgeChanges,
   Controls,
   Background,
   MiniMap,
   type Connection,
   type Node,
   type Edge,
+  type NodeChange,
+  type EdgeChange,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Plus } from 'lucide-react';
@@ -24,8 +28,8 @@ const defaultNodes: Node[] = [
 ];
 
 export function MindMap({ initialNodes, initialEdges, onUpdate }: MindMapProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes || defaultNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges || []);
+  const [nodes, setNodes] = useNodesState(initialNodes || defaultNodes);
+  const [edges, setEdges] = useEdgesState(initialEdges || []);
   const [nodeCount, setNodeCount] = useState(initialNodes?.length || 1);
 
   const onConnect = useCallback(
@@ -34,6 +38,34 @@ export function MindMap({ initialNodes, initialEdges, onUpdate }: MindMapProps) 
         const newEdges = addEdge(params, eds);
         onUpdate?.(nodes, newEdges);
         return newEdges;
+      });
+    },
+    [nodes, setEdges, onUpdate]
+  );
+
+  // Persist node repositioning (on drag end) and node deletions, which
+  // otherwise only update local state and are lost on reload.
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      setNodes((nds) => {
+        const updated = applyNodeChanges(changes, nds);
+        const persist = changes.some(
+          (c) => c.type === 'remove' || (c.type === 'position' && c.dragging === false)
+        );
+        if (persist) onUpdate?.(updated, edges);
+        return updated;
+      });
+    },
+    [edges, setNodes, onUpdate]
+  );
+
+  // Persist edge deletions.
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      setEdges((eds) => {
+        const updated = applyEdgeChanges(changes, eds);
+        if (changes.some((c) => c.type === 'remove')) onUpdate?.(nodes, updated);
+        return updated;
       });
     },
     [nodes, setEdges, onUpdate]
@@ -77,8 +109,8 @@ export function MindMap({ initialNodes, initialEdges, onUpdate }: MindMapProps) 
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
         onNodeDoubleClick={onNodeDoubleClick}
         fitView
