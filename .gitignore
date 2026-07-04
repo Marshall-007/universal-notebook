@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Env files (Supabase config is hardcoded as a fallback in src/lib/supabase.ts)
+.env
+.env.*
+!.env.example
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
