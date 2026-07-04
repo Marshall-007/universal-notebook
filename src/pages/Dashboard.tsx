@@ -11,18 +11,34 @@ import { TemplateGallery } from '@/components/notes/TemplateGallery';
 import { CommandPalette } from '@/components/search/CommandPalette';
 import { TipTapEditor } from '@/components/editor/TipTapEditor';
 import { MindMap } from '@/components/editor/MindMap';
-import { getTemplate } from '@/templates';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { SettingsPage } from '@/pages/Settings';
+import { getTemplate, buildTemplateContent, buildTemplateTitle } from '@/templates';
 import { groupNotesByDate, getDateGroupLabel } from '@/lib/utils';
 import { db } from '@/lib/db';
 import type { TemplateType, Note } from '@/types';
+import type { NotesView } from '@/stores/notesStore';
 import type { Node as FlowNode, Edge as FlowEdge } from 'reactflow';
 import { Plus, Search, ArrowLeft } from 'lucide-react';
 
 type Page = 'notes' | 'editor' | 'search' | 'notebooks' | 'settings' | 'pinned' | 'archive' | 'trash';
 
+const PAGE_VIEWS: Record<string, NotesView> = {
+  notes: 'active',
+  notebooks: 'active',
+  search: 'active',
+  pinned: 'pinned',
+  archive: 'archived',
+  trash: 'trash',
+};
+
 export function Dashboard() {
   const { user } = useAuthStore();
-  const { notes, loadNotes, loadNotebooks, createNote, updateNote, deleteNote, togglePin, archiveNote, activeNoteId, setActiveNote } = useNotesStore();
+  const {
+    notes, loadNotes, loadNotebooks, createNote, updateNote, deleteNote,
+    restoreNote, permanentlyDeleteNote, togglePin, archiveNote, unarchiveNote,
+    activeNoteId, setActiveNote, currentView,
+  } = useNotesStore();
   const { isCommandPaletteOpen, setCommandPaletteOpen, settings } = useAppStore();
   const [currentPage, setCurrentPage] = useState<Page>('notes');
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
@@ -52,8 +68,8 @@ export function Dashboard() {
       id: crypto.randomUUID(),
       userId: user.id,
       notebookId: useNotesStore.getState().activeNotebookId,
-      title: template.defaultTitle,
-      contentJson: template.contentJson,
+      title: buildTemplateTitle(template),
+      contentJson: buildTemplateContent(template),
       contentText: '',
       templateType,
       isPinned: false,
@@ -97,11 +113,16 @@ export function Dashboard() {
 
   const handleNavigate = useCallback((page: string) => {
     setCurrentPage(page as Page);
-    if (page === 'notes' || page === 'pinned' || page === 'archive' || page === 'trash') {
+    if (page !== 'editor') {
       setEditingNote(null);
       setActiveNote(null);
     }
-  }, [setActiveNote]);
+    const view = PAGE_VIEWS[page];
+    if (view && user) {
+      const notebookId = view === 'active' ? useNotesStore.getState().activeNotebookId : null;
+      loadNotes(user.id, notebookId, view);
+    }
+  }, [setActiveNote, user, loadNotes]);
 
   const dateGroups = groupNotesByDate(notes);
 
@@ -133,7 +154,7 @@ export function Dashboard() {
                   placeholder="Untitled"
                   className="bg-transparent outline-none w-full"
                 />
-              ) : currentPage === 'notes' ? 'All Notes' : currentPage === 'pinned' ? 'Pinned' : currentPage === 'archive' ? 'Archive' : currentPage === 'trash' ? 'Trash' : ''}
+              ) : currentPage === 'notes' ? 'All Notes' : currentPage === 'pinned' ? 'Pinned' : currentPage === 'archive' ? 'Archive' : currentPage === 'trash' ? 'Trash' : currentPage === 'settings' ? 'Settings' : currentPage === 'notebooks' ? 'Notebooks' : ''}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -160,36 +181,50 @@ export function Dashboard() {
 
         {/* Content area */}
         <div className="flex-1 overflow-hidden">
-          {currentPage === 'editor' && editingNote ? (
-            editingNote.templateType === 'mind-map' ? (
-              <MindMap
-                initialNodes={(editingNote.contentJson as { nodes?: FlowNode[] } | null)?.nodes}
-                initialEdges={(editingNote.contentJson as { edges?: FlowEdge[] } | null)?.edges}
-                onUpdate={(nodes, edges) => handleEditorUpdate({ type: 'mindmap', nodes, edges }, '')}
-              />
-            ) : (
-              <TipTapEditor
-                content={editingNote.contentJson}
-                onUpdate={handleEditorUpdate}
-                placeholder="Start writing your thoughts..."
-              />
-            )
+          {currentPage === 'settings' ? (
+            <div className="h-full overflow-y-auto pb-20 sm:pb-4">
+              <SettingsPage />
+            </div>
+          ) : currentPage === 'editor' && editingNote ? (
+            <ErrorBoundary onReset={handleBackToNotes}>
+              {editingNote.templateType === 'mind-map' ? (
+                <MindMap
+                  key={editingNote.id}
+                  initialNodes={(editingNote.contentJson as { nodes?: FlowNode[] } | null)?.nodes}
+                  initialEdges={(editingNote.contentJson as { edges?: FlowEdge[] } | null)?.edges}
+                  onUpdate={(nodes, edges) => handleEditorUpdate({ type: 'mindmap', nodes, edges }, '')}
+                />
+              ) : (
+                <TipTapEditor
+                  key={editingNote.id}
+                  content={editingNote.contentJson}
+                  onUpdate={handleEditorUpdate}
+                  placeholder="Start writing your thoughts..."
+                />
+              )}
+            </ErrorBoundary>
           ) : (
             <div className="h-full overflow-y-auto pb-20 sm:pb-4">
               {notes.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center p-8">
                   <div className="w-16 h-16 rounded-2xl bg-surface-100 dark:bg-surface-800 flex items-center justify-center mb-4">
-                    <span className="text-3xl">📝</span>
+                    <span className="text-3xl">{currentView === 'trash' ? '🗑️' : currentView === 'archived' ? '📦' : '📝'}</span>
                   </div>
-                  <h2 className="text-lg font-medium mb-1">No notes yet</h2>
-                  <p className="text-sm text-surface-400 mb-4">Create your first note to get started</p>
-                  <button
-                    onClick={handleNewNote}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white text-sm rounded-lg hover:bg-primary-600 transition-colors"
-                  >
-                    <Plus size={16} />
-                    New Note
-                  </button>
+                  <h2 className="text-lg font-medium mb-1">
+                    {currentView === 'trash' ? 'Trash is empty' : currentView === 'archived' ? 'No archived notes' : currentView === 'pinned' ? 'No pinned notes' : 'No notes yet'}
+                  </h2>
+                  {currentView === 'active' && (
+                    <>
+                      <p className="text-sm text-surface-400 mb-4">Create your first note to get started</p>
+                      <button
+                        onClick={handleNewNote}
+                        className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white text-sm rounded-lg hover:bg-primary-600 transition-colors"
+                      >
+                        <Plus size={16} />
+                        New Note
+                      </button>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="p-4 space-y-4">
@@ -204,10 +239,14 @@ export function Dashboard() {
                             key={note.id}
                             note={note}
                             isActive={activeNoteId === note.id}
+                            view={currentView}
                             onClick={() => handleNoteClick(note.id)}
                             onPin={() => togglePin(note.id)}
                             onArchive={() => archiveNote(note.id)}
                             onDelete={() => deleteNote(note.id)}
+                            onRestore={() => restoreNote(note.id)}
+                            onUnarchive={() => unarchiveNote(note.id)}
+                            onPermanentDelete={() => permanentlyDeleteNote(note.id)}
                           />
                         ))}
                       </div>

@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useAppStore } from '@/stores/appStore';
 import { LoginPage } from '@/pages/Login';
 import { Dashboard } from '@/pages/Dashboard';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import './app.css';
 
 function App() {
@@ -32,11 +33,11 @@ function App() {
     );
   }
 
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
-
-  return <Dashboard />;
+  return (
+    <ErrorBoundary>
+      {!isAuthenticated ? <LoginPage /> : <Dashboard />}
+    </ErrorBoundary>
+  );
 }
 
 export default App;

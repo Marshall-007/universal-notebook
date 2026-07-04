@@ -1,19 +1,35 @@
-import { Pin, Archive, Trash2, MoreVertical } from 'lucide-react';
+import { Pin, Archive, Trash2, MoreVertical, RotateCcw, ArchiveRestore } from 'lucide-react';
 import { formatNoteDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import type { Note } from '@/types';
+import type { NotesView } from '@/stores/notesStore';
 import { useState, useRef, useEffect } from 'react';
 
 interface NoteCardProps {
   note: Note;
   isActive: boolean;
+  view?: NotesView;
   onClick: () => void;
   onPin: () => void;
   onArchive: () => void;
   onDelete: () => void;
+  onRestore?: () => void;
+  onUnarchive?: () => void;
+  onPermanentDelete?: () => void;
 }
 
-export function NoteCard({ note, isActive, onClick, onPin, onArchive, onDelete }: NoteCardProps) {
+export function NoteCard({
+  note,
+  isActive,
+  view = 'active',
+  onClick,
+  onPin,
+  onArchive,
+  onDelete,
+  onRestore,
+  onUnarchive,
+  onPermanentDelete,
+}: NoteCardProps) {
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -69,10 +85,24 @@ export function NoteCard({ note, isActive, onClick, onPin, onArchive, onDelete }
             <MoreVertical size={14} className="text-surface-400" />
           </button>
           {showMenu && (
-            <div className="absolute right-0 top-6 w-36 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg shadow-lg py-1 z-10 animate-fade-in">
-              <MenuButton icon={Pin} label={note.isPinned ? 'Unpin' : 'Pin'} onClick={(e) => { e.stopPropagation(); onPin(); setShowMenu(false); }} />
-              <MenuButton icon={Archive} label="Archive" onClick={(e) => { e.stopPropagation(); onArchive(); setShowMenu(false); }} />
-              <MenuButton icon={Trash2} label="Delete" onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }} danger />
+            <div className="absolute right-0 top-6 w-40 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg shadow-lg py-1 z-10 animate-fade-in">
+              {view === 'trash' ? (
+                <>
+                  <MenuButton icon={RotateCcw} label="Restore" onClick={(e) => { e.stopPropagation(); onRestore?.(); setShowMenu(false); }} />
+                  <MenuButton icon={Trash2} label="Delete forever" onClick={(e) => { e.stopPropagation(); onPermanentDelete?.(); setShowMenu(false); }} danger />
+                </>
+              ) : view === 'archived' ? (
+                <>
+                  <MenuButton icon={ArchiveRestore} label="Unarchive" onClick={(e) => { e.stopPropagation(); onUnarchive?.(); setShowMenu(false); }} />
+                  <MenuButton icon={Trash2} label="Delete" onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }} danger />
+                </>
+              ) : (
+                <>
+                  <MenuButton icon={Pin} label={note.isPinned ? 'Unpin' : 'Pin'} onClick={(e) => { e.stopPropagation(); onPin(); setShowMenu(false); }} />
+                  <MenuButton icon={Archive} label="Archive" onClick={(e) => { e.stopPropagation(); onArchive(); setShowMenu(false); }} />
+                  <MenuButton icon={Trash2} label="Delete" onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }} danger />
+                </>
+              )}
             </div>
           )}
         </div>

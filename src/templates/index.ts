@@ -1,13 +1,17 @@
 import type { TemplateType } from '@/types';
 
+type Content = Record<string, unknown>;
+
 export interface TemplateDefinition {
   id: TemplateType;
   name: string;
   description: string;
   icon: string;
   category: string;
-  contentJson: Record<string, unknown>;
-  defaultTitle: string;
+  // Content and title may be factories so date-bearing templates are stamped
+  // at note-creation time rather than frozen to app-load time.
+  contentJson: Content | (() => Content);
+  defaultTitle: string | (() => string);
 }
 
 export const systemTemplates: TemplateDefinition[] = [
@@ -52,7 +56,7 @@ export const systemTemplates: TemplateDefinition[] = [
     icon: '📋',
     category: 'Professional',
     defaultTitle: 'Memo',
-    contentJson: {
+    contentJson: () => ({
       type: 'doc',
       content: [
         { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Memo' }] },
@@ -73,7 +77,7 @@ export const systemTemplates: TemplateDefinition[] = [
           ],
         },
       ],
-    },
+    }),
   },
   {
     id: 'brain-dump',
@@ -123,7 +127,7 @@ export const systemTemplates: TemplateDefinition[] = [
     icon: '🤝',
     category: 'Professional',
     defaultTitle: 'Meeting Notes',
-    contentJson: {
+    contentJson: () => ({
       type: 'doc',
       content: [
         { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Meeting Notes' }] },
@@ -143,7 +147,7 @@ export const systemTemplates: TemplateDefinition[] = [
         { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Next Steps' }] },
         { type: 'paragraph' },
       ],
-    },
+    }),
   },
   {
     id: 'journal',
@@ -151,8 +155,8 @@ export const systemTemplates: TemplateDefinition[] = [
     description: 'Daily entry with mood and reflection',
     icon: '📔',
     category: 'Personal',
-    defaultTitle: `Journal — ${new Date().toLocaleDateString()}`,
-    contentJson: {
+    defaultTitle: () => `Journal — ${new Date().toLocaleDateString()}`,
+    contentJson: () => ({
       type: 'doc',
       content: [
         { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: `📔 ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}` }] },
@@ -166,7 +170,7 @@ export const systemTemplates: TemplateDefinition[] = [
         { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Reflections' }] },
         { type: 'paragraph' },
       ],
-    },
+    }),
   },
   {
     id: 'cornell-notes',
@@ -175,7 +179,7 @@ export const systemTemplates: TemplateDefinition[] = [
     icon: '🎓',
     category: 'Study',
     defaultTitle: 'Cornell Notes',
-    contentJson: {
+    contentJson: () => ({
       type: 'doc',
       content: [
         { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Cornell Notes' }] },
@@ -190,12 +194,21 @@ export const systemTemplates: TemplateDefinition[] = [
         { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: '📋 Summary' }] },
         { type: 'paragraph', content: [{ type: 'text', marks: [{ type: 'italic' }], text: 'Write a brief summary of the key points...' }] },
       ],
-    },
+    }),
   },
 ];
 
 export function getTemplate(type: TemplateType): TemplateDefinition | undefined {
   return systemTemplates.find((t) => t.id === type);
+}
+
+// Resolve the (possibly lazy) content/title at the moment a note is created.
+export function buildTemplateContent(template: TemplateDefinition): Content {
+  return typeof template.contentJson === 'function' ? template.contentJson() : template.contentJson;
+}
+
+export function buildTemplateTitle(template: TemplateDefinition): string {
+  return typeof template.defaultTitle === 'function' ? template.defaultTitle() : template.defaultTitle;
 }
 
 export function getTemplatesByCategory(): Map<string, TemplateDefinition[]> {
