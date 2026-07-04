@@ -54,6 +54,13 @@ jobs:
           # Backend config (empty -> app builds in offline demo mode)
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # macOS code signing + notarization (empty -> unsigned build)
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tauriScript: npx tauri
           tagName: ${{ steps.rel.outputs.tag }}
@@ -93,15 +100,39 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Decode Android keystore (if configured)
+        id: ks
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build APK
         working-directory: android
-        run: ./gradlew assembleDebug
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.ks.outputs.signed == 'true' && format('{0}/release.keystore', runner.temp) || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ "${{ steps.ks.outputs.signed }}" = "true" ]; then
+            ./gradlew assembleRelease
+            echo "APK_PATH=app/build/outputs/apk/release/app-release.apk" >> "$GITHUB_ENV"
+          else
+            ./gradlew assembleDebug
+            echo "APK_PATH=app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: universal-notebook-android
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/${{ env.APK_PATH }}
 
   # Attach the APK to the same draft release the desktop job created. Runs after
   # build-desktop so the release already exists (no create race), and works for
@@ -134,4 +165,4 @@ jobs:
         with:
           draft: true
           tag_name: ${{ steps.rel.outputs.tag }}
-          files: apk/app-debug.apk
+          files: apk/*.apk
